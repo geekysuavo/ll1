@@ -19,7 +19,7 @@ that could ruin your day if they pop up later during parser implementation.
 _%empty_ is absolutely mandatory for writing epsilon productions. Character
 literals are also accepted as tokens, so the following grammar:
 
-```Bison
+```yacc
 %%
 expr : expr '+' term
      | expr '-' term
@@ -39,7 +39,8 @@ same nonterminal. _;)_
 
 However, **ll1** will be tickled pink to accept this input:
 
-```Bison
+```yacc
+%%
 expr : term expr_next ;
 term : factor term_next ;
 
@@ -47,6 +48,7 @@ expr_next : '+' expr | '-' expr | %empty ;
 term_next : '*' term | '/' term | %empty ;
 
 factor : ID | NUM ;
+%%
 ```
 
 In addition to _LL(1)_ conflict reports, **ll1** will also output information
