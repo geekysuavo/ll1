@@ -7,8 +7,8 @@ in order to determine whether it is
 [LL1(1)] (https://en.wikipedia.org/wiki/LL_grammar), and thus suitable
 for implementation _via_ a
 [predictive parser] (https://en.wikipedia.org/wiki/Recursive_descent_parser)
-algorithm. Running a grammar through **ll1** can help the user catch
-[Left recursion] (https://en.wikipedia.org/wiki/Left_recursion) and other
+algorithm. Running a grammar through **ll1** can help you catch
+[left recursion] (https://en.wikipedia.org/wiki/Left_recursion) and other
 [conflicts] (https://en.wikipedia.org/wiki/LL_parser#LL.281.29_Conflicts)
 that could ruin your day if they pop up later during parser implementation.
 
