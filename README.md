@@ -4,7 +4,7 @@
 The **ll1** tool performs a small set of analyses on a
 [context-free grammar] (https://en.wikipedia.org/wiki/Context-free_grammar)
 in order to determine whether it is
-[LL1(1)] (https://en.wikipedia.org/wiki/LL_grammar), and thus suitable
+[LL(1)] (https://en.wikipedia.org/wiki/LL_grammar), and thus suitable
 for implementation _via_ a
 [predictive parser] (https://en.wikipedia.org/wiki/Recursive_descent_parser)
 algorithm. Running a grammar through **ll1** can help you catch
