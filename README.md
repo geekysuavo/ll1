@@ -7,8 +7,8 @@ in order to determine whether it is
 [LL1(1)] (https://en.wikipedia.org/wiki/LL_grammar), and thus suitable
 for implementation _via_ a
 [predictive parser] (https://en.wikipedia.org/wiki/Recursive_descent_parser)
-algorithm. Running a grammar through **ll1** can help the user catch
-[Left recursion] (https://en.wikipedia.org/wiki/Left_recursion) and other
+algorithm. Running a grammar through **ll1** can help you catch
+[left recursion] (https://en.wikipedia.org/wiki/Left_recursion) and other
 [conflicts] (https://en.wikipedia.org/wiki/LL_parser#LL.281.29_Conflicts)
 that could ruin your day if they pop up later during parser implementation.
 
@@ -19,7 +19,7 @@ that could ruin your day if they pop up later during parser implementation.
 _%empty_ is absolutely mandatory for writing epsilon productions. Character
 literals are also accepted as tokens, so the following grammar:
 
-```Bison
+```yacc
 %%
 expr : expr '+' term
      | expr '-' term
@@ -39,7 +39,8 @@ same nonterminal. _;)_
 
 However, **ll1** will be tickled pink to accept this input:
 
-```Bison
+```yacc
+%%
 expr : term expr_next ;
 term : factor term_next ;
 
@@ -47,6 +48,7 @@ expr_next : '+' expr | '-' expr | %empty ;
 term_next : '*' term | '/' term | %empty ;
 
 factor : ID | NUM ;
+%%
 ```
 
 In addition to _LL(1)_ conflict reports, **ll1** will also output information
