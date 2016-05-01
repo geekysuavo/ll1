@@ -1,6 +1,6 @@
 
 CC=gcc
-CFLAGS=-g -Wall
+CFLAGS=-g -Wall -Wextra -std=c99
 
 YACC=bison
 YFLAGS=-d

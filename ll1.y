@@ -32,33 +32,48 @@ const char *yyfname, *argv0;
 int yylineno;
 FILE *yyin;
 
+/* data structure for holding grammar symbol information.
+ */
 struct symbol {
+  /* symbol @name */
   char *name;
 
+  /* @first and @follow sets for non-terminal symbols. */
   int *first, *follow;
   int visited;
 
+  /* whether the symbol @is_terminal or @derives_empty. */
   int is_terminal;
   int derives_empty;
 };
 
-struct symbol *symbols;
-int n_symbols;
-
+/* data structure for holding productions of the grammar.
+ */
 struct production {
-  int lineno;
-
+  /* @lhs: left-hand side one-based symbol table index.
+   * @rhs: right-hand side one-based symbol table indices.
+   */
   int lhs, *rhs;
 
+  /* terminal @yield of nonterminals and whether
+   * a nonterminal @derives_empty.
+   */
   int yield;
   int derives_empty;
 
+  /* @predict set for each production. */
   int *predict;
 };
 
+/* symbol table. */
+struct symbol *symbols;
+int n_symbols;
+
+/* production list. */
 struct production *prods;
 int n_prods;
 
+/* pre-declare symbol table functions. */
 void symbols_init (void);
 void symbols_free (void);
 int symbols_find (char *name);
@@ -68,38 +83,54 @@ void symbols_print_empty (void);
 void symbols_print_first (void);
 void symbols_print_follow (void);
 
+/* pre-declare production list functions. */
 void prods_init (void);
 void prods_free (void);
 void prods_add (int lhs, int **rhsv);
 void prods_print (void);
 void prods_print_predict (void);
 
+/* pre-declare functions to learn information about the grammar. */
 void derives_empty (void);
 void first (void);
 void follow (void);
 void predict (void);
 void conflicts (void);
 
+/* pre-declare symbol array functions. */
 int symv_len (int *sv);
 int *symv_new (int s);
 int *symv_add (int *sv, int s);
+void symv_print (int *sv);
 
+/* pre-declare symbol double-array functions. */
 int symvv_len (int **vv);
 int **symvv_new (int *v);
 int **symvv_add (int **vv, int *v);
 %}
 
+/* define the data structure used for passing attributes with symbols
+ * in the parsed grammar.
+ */
 %union {
+  /* @sym: one-based symbol table index.
+   * @symv: zero-terminated array of symbol table indices.
+   * @symvv: null-terminated array of symbol table index arrays.
+   * @id: identifier string prior to symbol table translation.
+   */
   int sym, *symv, **symvv;
   char *id;
 }
 
+/* define the set of terminal symbols to parse. */
 %token EPSILON ID DERIVES END OR
 
+/* set up attribute types of nonterminals. */
 %type<sym> symbol
 %type<symv> symbols
 %type<symvv> productions
 
+/* set up attribute types of terminals. */
 %type<id> ID EPSILON
 
 %%
@@ -137,6 +168,8 @@ void derp (const char *fmt, ...) {
   exit(1);
 }
 
+/* main(): application entry point.
+ */
 int main (int argc, char **argv) {
   symbols_init();
   prods_init();
@@ -196,20 +229,25 @@ int main (int argc, char **argv) {
   return 0;
 }
 
+/* symbol_is_empty(): return whether a symbol (specified by the one-based
+ * index @sym) is the epsilon terminal.
+ */
 int symbol_is_empty (int sym) {
   return (sym >= 1 && sym <= n_symbols &&
           strcmp(symbols[sym - 1].name, STR_EPSILON) == 0);
 }
 
+/* symbols_init(): initialize the global symbol table.
+ */
 void symbols_init (void) {
   symbols = NULL;
   n_symbols = 0;
 }
 
+/* symbols_free(): deallocate the global symbol table.
+ */
 void symbols_free (void) {
-  int i;
-
-  for (i = 0; i < n_symbols; i++) {
+  for (int i = 0; i < n_symbols; i++) {
     free(symbols[i].name);
 
     if (symbols[i].first)
@@ -222,6 +260,9 @@ void symbols_free (void) {
   free(symbols);
 }
 
+/* symbols_find(): get the one-based index of a symbol (by @name) in the
+ * symbol table, or 0 if no such symbol exists.
+ */
 int symbols_find (char *name) {
   int i;
 
@@ -233,6 +274,11 @@ int symbols_find (char *name) {
   return 0;
 }
 
+/* symbols_add(): ensure that a symbol having @name and @is_terminal
+ * flag exists in the symbol table. if the symbol @name exists, its
+ * @is_terminal flag is updated based on the passed value. the
+ * one-based symbol table index is returned.
+ */
 int symbols_add (char *name, int is_terminal) {
   int sym = symbols_find(name);
   if (sym) {
@@ -259,25 +305,30 @@ int symbols_add (char *name, int is_terminal) {
   return n_symbols;
 }
 
+/* symbols_print(): print all symbols in the table with @is_terminal
+ * flag equaling a certain value.
+ */
 void symbols_print (int is_terminal) {
-  int i;
-
-  for (i = 0; i < n_symbols; i++) {
+  for (int i = 0; i < n_symbols; i++) {
     if (symbols[i].is_terminal == is_terminal)
       printf("  %s\n", symbols[i].name);
   }
 }
 
+/* symbols_print_empty(): print all symbols that may derive epsilon
+ * in zero or more steps.
+ */
 void symbols_print_empty (void) {
+  unsigned int len;
   char buf[32];
-  int i, n;
+  int i;
 
-  for (i = n = 0; i < n_symbols; i++) {
-    if (strlen(symbols[i].name) > n)
-      n = strlen(symbols[i].name);
+  for (i = 0, len = 0; i < n_symbols; i++) {
+    if (strlen(symbols[i].name) > len)
+      len = strlen(symbols[i].name);
   }
 
-  snprintf(buf, 32, "  %%%ds -->* %%%%empty\n", n);
+  snprintf(buf, 32, "  %%%us -->* %%%%empty\n", len);
 
   for (i = 0; i < n_symbols; i++) {
     if (symbol_is_empty(i + 1))
@@ -288,91 +339,53 @@ void symbols_print_empty (void) {
   }
 }
 
+/* symbols_print_first(): print all symbols in the @first sets of all
+ * nonterminals.
+ */
 void symbols_print_first (void) {
-  int i, j, n, nwrap, nfi, *fi;
-  char buf[8];
-
-  for (i = 0; i < n_symbols; i++) {
-    if (symbols[i].is_terminal)
+  for (int i = 0; i < n_symbols; i++) {
+    if (symbols[i].is_terminal ||
+        symv_len(symbols[i].first) == 0)
       continue;
 
-    fi = symbols[i].first;
-    nfi = symv_len(fi);
-
-    for (j = n = 0; j < nfi; j++) {
-      if (strlen(symbols[fi[j] - 1].name) > n)
-        n = strlen(symbols[fi[j] - 1].name);
-    }
-
-    n += 2;
-    nwrap = 76 / n;
-
-    snprintf(buf, 8, "%%-%ds", n);
-    printf("  first(%s):\n    ", symbols[i].name);
-
-    for (j = 0; j < nfi; j++) {
-      printf(buf, symbols[fi[j] - 1].name);
-
-      if ((j + 1) % nwrap == 0 && j < nfi - 1)
-        printf("\n    ");
-    }
-
-    printf("\n\n");
+    printf("  first(%s):", symbols[i].name);
+    symv_print(symbols[i].first);
   }
 }
 
+/* symbols_print_follow(): print all symbols in the @follow sets of all
+ * nonterminals.
+ */
 void symbols_print_follow (void) {
-  int i, j, n, nwrap, nfo, *fo;
-  char buf[8];
-
-  for (i = 0; i < n_symbols; i++) {
-    if (symbols[i].is_terminal)
+  for (int i = 0; i < n_symbols; i++) {
+    if (symbols[i].is_terminal ||
+        symv_len(symbols[i].follow) == 0)
       continue;
 
-    fo = symbols[i].follow;
-    nfo = symv_len(fo);
-
-    if (nfo == 0)
-      continue;
-
-    for (j = n = 0; j < nfo; j++) {
-      if (strlen(symbols[fo[j] - 1].name) > n)
-        n = strlen(symbols[fo[j] - 1].name);
-    }
-
-    n += 2;
-    nwrap = 76 / n;
-
-    snprintf(buf, 8, "%%-%ds", n);
-    printf("  follow(%s):\n    ", symbols[i].name);
-
-    for (j = 0; j < nfo; j++) {
-      printf(buf, symbols[fo[j] - 1].name);
-
-      if ((j + 1) % nwrap == 0 && j < nfo - 1)
-        printf("\n    ");
-    }
-
-    printf("\n\n");
+    printf("  follow(%s):", symbols[i].name);
+    symv_print(symbols[i].follow);
   }
 }
 
+/* symbols_reset_visite(): reset the @visited flag of all symbols
+ * to zero. used internally by @first and @follow set construction.
+ */
 void symbols_reset_visited (void) {
-  int i;
-
-  for (i = 0; i < n_symbols; i++)
+  for (int i = 0; i < n_symbols; i++)
     symbols[i].visited = 0;
 }
 
+/* prods_init(): initialize the global productions list.
+ */
 void prods_init (void) {
   prods = NULL;
   n_prods = 0;
 }
 
+/* prods_free(): deallocate the global productions list.
+ */
 void prods_free (void) {
-  int i;
-
-  for (i = 0; i < n_prods; i++) {
+  for (int i = 0; i < n_prods; i++) {
     free(prods[i].rhs);
 
     if (prods[i].predict)
@@ -382,21 +395,21 @@ void prods_free (void) {
   free(prods);
 }
 
+/* prods_add(): add a set of productions with left-hand-side symbol index
+ * @lhs and right-hand-side symbol index arrays @rhsv to the global
+ * productions list.
+ */
 void prods_add (int lhs, int **rhsv) {
-  int i, *rhs, n;
+  int n = symvv_len(rhsv);
 
-  n = symvv_len(rhsv);
-
-  for (i = 0; i < n; i++) {
-    rhs = rhsv[i];
+  for (int i = 0; i < n; i++) {
+    int *rhs = rhsv[i];
 
     prods = (struct production*)
       realloc(prods, ++n_prods * sizeof(struct production));
 
     if (!prods)
       derp("unable to resize production list");
-
-    prods[n_prods - 1].lineno = yylineno;
 
     prods[n_prods - 1].lhs = lhs;
     prods[n_prods - 1].rhs = rhs;
@@ -409,82 +422,65 @@ void prods_add (int lhs, int **rhsv) {
   free(rhsv);
 }
 
+/* prods_print(): print the global productions list in a format that
+ * resembles the original bison grammar.
+ */
 void prods_print (void) {
-  int i, j, lhs, lhs_prev, *rhs;
+  int lhs_prev = 0;
 
-  lhs_prev = 0;
-
-  for (i = 0; i < n_prods; i++) {
-    lhs = prods[i].lhs;
-    rhs = prods[i].rhs;
+  for (int i = 0; i < n_prods; i++) {
+    int lhs = prods[i].lhs;
+    int *rhs = prods[i].rhs;
 
     if (lhs != lhs_prev) {
       printf("\n  %s :", symbols[lhs - 1].name);
       lhs_prev = lhs;
     }
     else {
-      for (j = 0; j < strlen(symbols[lhs - 1].name) + 3; j++)
+      for (unsigned int j = 0; j < strlen(symbols[lhs - 1].name) + 3; j++)
         printf(" ");
 
       printf("|");
     }
 
-    for (j = 0; j < symv_len(rhs); j++)
+    for (int j = 0; j < symv_len(rhs); j++)
       printf(" %s", symbols[rhs[j] - 1].name);
 
     printf("\n");
   }
 }
 
+/* prods_print_predict(): print the @predict sets of all productions.
+ */
 void prods_print_predict (void) {
-  int i, j, n, nwrap, npred, lhs, *rhs, *pred;
-  char buf[8];
-
-  for (i = 0; i < n_prods; i++) {
-    lhs = prods[i].lhs;
-    rhs = prods[i].rhs;
-
-    pred = prods[i].predict;
-    npred = symv_len(pred);
+  for (int i = 0; i < n_prods; i++) {
+    int lhs = prods[i].lhs;
+    int *rhs = prods[i].rhs;
 
     printf("  %s :", symbols[lhs - 1].name);
-    for (j = 0; j < symv_len(rhs); j++)
+    for (int j = 0; j < symv_len(rhs); j++)
       printf(" %s", symbols[rhs[j] - 1].name);
 
-    for (j = n = 0; j < npred; j++) {
-      if (strlen(symbols[pred[j] - 1].name) > n)
-        n = strlen(symbols[pred[j] - 1].name);
-    }
-
-    n += 2;
-    nwrap = 76 / n;
-
-    snprintf(buf, 8, "%%-%ds", n);
-    printf("\n    ");
-
-    for (j = 0; j < npred; j++) {
-      printf(buf, symbols[pred[j] - 1].name);
-
-      if ((j + 1) % nwrap == 0 && j < npred - 1)
-        printf("\n    ");
-    }
-
-    printf("\n\n");
+    symv_print(prods[i].predict);
   }
 }
 
+/* symv_len(): get the length of a symbol array. symbols are one-based, so
+ * a zero-terminator is used to mark the end of the array.
+ */
 int symv_len (int *sv) {
-  int n = 0;
-
   if (!sv)
     return 0;
 
+  int n = 0;
   while (sv[n])
     n++;
 
   return n;
 }
 
+/* symv_new(): construct a new symbol array from a single symbol.
+ */
 int *symv_new (int s) {
   int *sv = (int*) malloc(2 * sizeof(int));
   if (!sv)
@@ -496,6 +492,9 @@ int *symv_new (int s) {
   return sv;
 }
 
+/* symv_add(): create a new symbol array that contains both @sv and @s,
+ * free @sv, and return the new array.
+ */
 int *symv_add (int *sv, int s) {
   if (!sv)
     return symv_new(s);
@@ -516,13 +515,14 @@ int *symv_add (int *sv, int s) {
   return snew;
 }
 
+/* symv_incl(): create a new array as in symv_add(), but do not add
+ * duplicate symbols to the array.
+ */
 int *symv_incl (int *sv, int s) {
-  int i;
-
   if (!sv)
     return symv_new(s);
 
-  for (i = 0; i < symv_len(sv); i++) {
+  for (int i = 0; i < symv_len(sv); i++) {
     if (sv[i] == s)
       return sv;
   }
@@ -530,6 +530,9 @@ int *symv_incl (int *sv, int s) {
   return symv_add(sv, s);
 }
 
+/* symv_intersect(): create a new array that is the intersection of the
+ * sets (symbol arrays) @sva and @svb.
+ */
 int *symv_intersect (int *sva, int *svb) {
   int ia, ib, na, nb, *result;
 
@@ -547,18 +550,53 @@ int *symv_intersect (int *sva, int *svb) {
   return result;
 }
 
-int symvv_len (int **vv) {
-  int n = 0;
+/* symv_print(): print the symbols (as strings) within a symbol array,
+ * making sure to keep pretty pretty formatting.
+ */
+void symv_print (int *sv) {
+  unsigned int len;
+  int i, n, wrap;
+  char buf[16];
 
+  n = symv_len(sv);
+
+  for (i = len = 0; i < n; i++) {
+    if (strlen(symbols[sv[i] - 1].name) > len)
+      len = strlen(symbols[sv[i] - 1].name);
+  }
+
+  len += 2;
+  wrap = 76 / len;
+  snprintf(buf, 16, "%%-%us", len);
+
+  printf("\n    ");
+  for (i = 0; i < n; i++) {
+    printf(buf, symbols[sv[i] - 1].name);
+
+    if ((i + 1) % wrap == 0 && i < n - 1)
+      printf("\n    ");
+  }
+
+  printf("\n\n");
+}
+
+/* symvv_len(): get the length of a symbol double-array. null-terminators
+ * are used to mark the end of the outer array.
+ */
+int symvv_len (int **vv) {
   if (!vv)
     return 0;
 
+  int n = 0;
   while (vv[n])
     n++;
 
   return n;
 }
 
+/* symvv_new(): construct a new symbol double-array from a single symbol
+ * array.
+ */
 int **symvv_new (int *v) {
   int **vv = (int**) malloc(2 * sizeof(int*));
   if (!vv)
@@ -570,6 +608,9 @@ int **symvv_new (int *v) {
   return vv;
 }
 
+/* symvv_add(): create a new symbol double-array that contains both @vv
+ * and @v, free @vv, and return the new double-array.
+ */
 int **symvv_add (int **vv, int *v) {
   int nv = symvv_len(vv);
   int **vnew = (int**) malloc((nv + 2) * sizeof(int*));
@@ -587,6 +628,8 @@ int **symvv_add (int **vv, int *v) {
   return vnew;
 }
 
+/* derives_empty_check_prod(): internal worker function for derives_empty().
+ */
 void derives_empty_check_prod (int i, int **work) {
   if (prods[i].yield == 0) {
     prods[i].derives_empty = 1;
@@ -598,11 +641,14 @@ void derives_empty_check_prod (int i, int **work) {
   }
 }
 
+/* derives_empty(): determine which symbols and productions in the grammar
+ * are capable of deriving epsilon in any number of steps.
+ */
 void derives_empty (void) {
-  int i, j, k, *work, n_work;
+  int i, j, k;
 
-  work = NULL;
-  n_work = 0;
+  int *work = NULL;
+  int n_work = 0;
 
   for (i = 0; i < n_symbols; i++) {
     if (symbol_is_empty(i + 1))
@@ -645,6 +691,8 @@ void derives_empty (void) {
   free(work);
 }
 
+/* first_set(): determine the @first set of a given set of symbols.
+ */
 int *first_set (int *set) {
   int i, j, *result, *fi_rhs;
 
@@ -682,22 +730,22 @@ int *first_set (int *set) {
   return result;
 }
 
+/* first(): compute the @first sets of all symbols in the grammar.
+ */
 void first (void) {
-  int i, *set;
-
-  for (i = 0; i < n_symbols; i++) {
+  for (int i = 0; i < n_symbols; i++) {
     symbols_reset_visited();
 
-    set = symv_new(i + 1);
+    int *set = symv_new(i + 1);
     symbols[i].first = first_set(set);
     free(set);
   }
 }
 
+/* follow_set_allempty(): worker function for follow_set().
+ */
 int follow_set_allempty (int *set) {
-  int i;
-
-  for (i = 0; i < symv_len(set); i++) {
+  for (int i = 0; i < symv_len(set); i++) {
     if (symbols[set[i] - 1].derives_empty == 0 ||
         symbols[set[i] - 1].is_terminal)
       return 0;
@@ -706,33 +754,33 @@ int follow_set_allempty (int *set) {
   return 1;
 }
 
+/* follow_set(): determine the @follow set of a given nonterminal.
+ */
 int *follow_set (int sym) {
-  int i, j, k, *result, *tail, *fi;
-
-  result = NULL;
+  int *result = NULL;
 
   if (symbols[sym - 1].visited == 0) {
     symbols[sym - 1].visited = 1;
 
-    for (i = 0; i < n_prods; i++) {
-      for (j = 0; j < symv_len(prods[i].rhs); j++) {
+    for (int i = 0; i < n_prods; i++) {
+      for (int j = 0; j < symv_len(prods[i].rhs); j++) {
         if (prods[i].rhs[j] != sym)
           continue;
 
-        tail = prods[i].rhs + (j + 1);
+        int *tail = prods[i].rhs + (j + 1);
 
         if (*tail) {
-          fi = symbols[*tail - 1].first;
-          for (k = 0; k < symv_len(fi); k++)
+          int *fi = symbols[*tail - 1].first;
+          for (int k = 0; k < symv_len(fi); k++)
             result = symv_incl(result, fi[k]);
         }
 
         if (follow_set_allempty(tail)) {
-          fi = follow_set(prods[i].lhs);
-          for (k = 0; k < symv_len(fi); k++)
-            result = symv_incl(result, fi[k]);
+          int *fo = follow_set(prods[i].lhs);
+          for (int k = 0; k < symv_len(fo); k++)
+            result = symv_incl(result, fo[k]);
 
-          free(fi);
+          free(fo);
         }
       }
     }
@@ -741,19 +789,21 @@ int *follow_set (int sym) {
   return result;
 }
 
+/* follow(): compute the @follow sets of all symbols in the grammar.
+ */
 void follow (void) {
-  int i, j, nfo, *fo;
-
-  for (i = 0; i < n_symbols; i++) {
+  for (int i = 0; i < n_symbols; i++) {
     symbols_reset_visited();
 
     if (symbols[i].is_terminal)
       continue;
 
-    symbols[i].follow = fo = follow_set(i + 1);
-    nfo = symv_len(fo);
+    symbols[i].follow = follow_set(i + 1);
 
-    for (j = 0; j < nfo; j++) {
+    int *fo = symbols[i].follow;
+    int nfo = symv_len(fo);
+
+    for (int j = 0; j < nfo; j++) {
       if (symbol_is_empty(fo[j])) {
         fo[j] = fo[nfo - 1];
         fo[nfo - 1] = 0;
@@ -763,17 +813,17 @@ void follow (void) {
   }
 }
 
+/* predict_set(): determine the predict set of a given production.
+ */
 int *predict_set (int iprod, int *set) {
-  int i, *result, *fo;
-
   symbols_reset_visited();
-  result = first_set(set);
+  int *result = first_set(set);
 
   if (prods[iprod].derives_empty) {
     symbols_reset_visited();
-    fo = follow_set(prods[iprod].lhs);
+    int *fo = follow_set(prods[iprod].lhs);
 
-    for (i = 0; i < symv_len(fo); i++)
+    for (int i = 0; i < symv_len(fo); i++)
       result = symv_incl(result, fo[i]);
 
     free(fo);
@@ -782,23 +832,25 @@ int *predict_set (int iprod, int *set) {
   return result;
 }
 
+/* predict(): compute the @predict sets of all productions in the grammar.
+ */
 void predict (void) {
-  int i, j, k, lhs, npred, *pred;
-
-  for (i = 0; i < n_symbols; i++) {
-    lhs = i + 1;
+  for (int i = 0; i < n_symbols; i++) {
+    int lhs = i + 1;
 
     if (symbols[i].is_terminal)
       continue;
 
-    for (j = 0; j < n_prods; j++) {
+    for (int j = 0; j < n_prods; j++) {
       if (prods[j].lhs != lhs)
         continue;
 
-      prods[j].predict = pred = predict_set(j, prods[j].rhs);
-      npred = symv_len(pred);
+      prods[j].predict = predict_set(j, prods[j].rhs);
 
-      for (k = 0; k < npred; k++) {
+      int *pred = prods[j].predict;
+      int npred = symv_len(pred);
+
+      for (int k = 0; k < npred; k++) {
         if (symbol_is_empty(pred[k])) {
           pred[k] = pred[npred - 1];
           pred[npred - 1] = 0;
@@ -809,58 +861,41 @@ void predict (void) {
   }
 }
 
+/* conflicts_print(): print information about a predict set overlap
+ * for a single pair of productions indexed by @id1 and @id2.
+ */
 void conflicts_print (int id1, int id2, int *overlap) {
-  int i, n, nwrap;
-  char buf[8];
-
   printf("  %s :", symbols[prods[id1].lhs - 1].name);
-  for (i = 0; i < symv_len(prods[id1].rhs); i++)
+  for (int i = 0; i < symv_len(prods[id1].rhs); i++)
     printf(" %s", symbols[prods[id1].rhs[i] - 1].name);
 
   printf("\n  %s :", symbols[prods[id2].lhs - 1].name);
-  for (i = 0; i < symv_len(prods[id2].rhs); i++)
+  for (int i = 0; i < symv_len(prods[id2].rhs); i++)
     printf(" %s", symbols[prods[id2].rhs[i] - 1].name);
 
-  for (i = n = 0; i < symv_len(overlap); i++) {
-    if (strlen(symbols[overlap[i] - 1].name) > n)
-      n = strlen(symbols[overlap[i] - 1].name);
-  }
-
-  n += 2;
-  nwrap = 76 / n;
-
-  snprintf(buf, 8, "%%-%ds", n);
-  printf("\n    ");
-
-  for (i = 0; i < symv_len(overlap); i++) {
-    printf(buf, symbols[overlap[i] - 1].name);
-
-    if ((i + 1) % nwrap == 0 && i < symv_len(overlap) - 1)
-      printf("\n    ");
-  }
-
-  printf("\n\n");
+  symv_print(overlap);
 }
 
+/* conflicts(): print all LL(1) conflicts in a grammar, if any.
+ */
 void conflicts (void) {
-  int i, j1, j2, *pred1, *pred2, *u;
   int header = 0;
 
-  for (i = 0; i < n_symbols; i++) {
+  for (int i = 0; i < n_symbols; i++) {
     if (symbols[i].is_terminal)
       continue;
 
-    for (j1 = 0; j1 < n_prods; j1++) {
-      pred1 = prods[j1].predict;
+    for (int j1 = 0; j1 < n_prods; j1++) {
+      int *pred1 = prods[j1].predict;
       if (prods[j1].lhs != i + 1)
         continue;
 
-      for (j2 = j1 + 1; j2 < n_prods; j2++) {
-        pred2 = prods[j2].predict;
+      for (int j2 = j1 + 1; j2 < n_prods; j2++) {
+        int *pred2 = prods[j2].predict;
         if (prods[j2].lhs != i + 1)
           continue;
 
-        u = symv_intersect(pred1, pred2);
+        int *u = symv_intersect(pred1, pred2);
 
         if (symv_len(u)) {
           if (!header) {
@@ -882,10 +917,15 @@ void conflicts (void) {
     printf("No conflicts, grammar is LL(1)\n  :D :D :D\n\n");
 }
 
+/* yyerror(): error reporting function called by bison on parse errors.
+ */
 void yyerror (const char *msg) {
   fprintf(stderr, "%s: error: %s:%d: %s\n", argv0, yyfname, yylineno, msg);
 }
 
+/* yylex(): lexical analysis function that breaks the input grammar file
+ * into a stream of tokens for the bison parser.
+ */
 int yylex (void) {
   int c, ntext;
   char *text;
