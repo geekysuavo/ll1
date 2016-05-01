@@ -21,10 +21,12 @@ literals are also accepted as tokens, so the following grammar:
 
 ```yacc
 %%
+/* left-recursive! */
 expr : expr '+' term
      | expr '-' term
      | term ;
 
+/* left-recursive! */
 term : term '*' factor
      | term '/' factor
      | factor ;
@@ -41,6 +43,7 @@ However, **ll1** will be tickled pink to accept this input:
 
 ```yacc
 %%
+/* tail-recursive... :) */
 expr : term expr_next ;
 term : factor term_next ;
 
