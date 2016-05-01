@@ -1,4 +1,6 @@
 
+/* simple left-recursive expression grammar. */
+
 expr : expr '+' term
      | expr '-' term
      | term

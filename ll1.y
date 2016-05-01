@@ -179,7 +179,7 @@ int main (int argc, char **argv) {
   if (argc != 2)
     derp("input filename required");
 
-  yylineno = 0;
+  yylineno = 1;
   yyfname = argv[1];
   yyin = fopen(yyfname, "r");
 
@@ -927,7 +927,7 @@ void yyerror (const char *msg) {
  * into a stream of tokens for the bison parser.
  */
 int yylex (void) {
-  int c, ntext;
+  int c, cprev, ntext;
   char *text;
 
   while (1) {
@@ -945,6 +945,33 @@ int yylex (void) {
       case '\n':
         yylineno++;
         break;
+    }
+
+    if (c == '/') {
+      c = fgetc(yyin);
+
+      if (c == '/') {
+        while (c && c != '\n')
+          c = fgetc(yyin);
+
+        if (c == EOF) return c;
+        yylineno++;
+      }
+      else if (c == '*') {
+        cprev = c;
+        c = fgetc(yyin);
+
+        while (c && (cprev != '*' || c != '/')) {
+          cprev = c;
+          c = fgetc(yyin);
+
+          if (c == '\n') yylineno++;
+        }
+
+        if (c == EOF) return c;
+      }
+      else
+        fseek(yyin, -1, SEEK_CUR);
     }
 
     if (c == '\'') {

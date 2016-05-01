@@ -1,4 +1,6 @@
 
+/* simple right-recursive (i.e. tail-recursive) expression grammar. */
+
 expr : term expr_next ;
 
 expr_next : '+' expr
